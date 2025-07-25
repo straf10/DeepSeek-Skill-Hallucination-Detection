@@ -27,8 +27,8 @@ OCC_LABELS = {
 
 def main():
     # Fixed input and output paths
-    excel_path = r"C:\Python\THESIS\skillab_job_fetcher\output\output.xlsx"
-    output_dir = "figures"
+    excel_path = r"/output/output.xlsx"
+    output_dir = "../figures"
     os.makedirs(output_dir, exist_ok=True)
 
     # Load data sheets

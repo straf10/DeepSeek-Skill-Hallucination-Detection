@@ -52,7 +52,9 @@ def main():
     logging.basicConfig(level=logging.DEBUG)
     jobs = fetch_jobs()
     print(f"Fetched {len(jobs)} unique jobs")
-    export_excel(jobs, outdir=Path("output"))
+    export_excel(jobs, outdir=Path("../output"))
+    #excel_path = r"C:\Python\THESIS\skillab_job_fetcher\output\output.xlsx"
+    #report_missing_values(excel_path)
 
 def _refresh_token() -> None:
     """Ανανεώνει / παίρνει JWT token και το εισάγει στα headers του session."""
@@ -222,7 +224,36 @@ def export_excel(jobs: List[Dict], *, outdir: Path) -> None:
 
     print(f"[OK] Excel file written → {output_path.resolve()}")
 
+def report_missing_values(excel_path):
+    """
+    Διαβάζει το Excel αρχείο και αναφέρει πόσες κενές τιμές (NaN ή
+    κενές συμβολοσειρές) υπάρχουν σε κάθε στήλη.
+    """
+    df = pd.read_excel(excel_path)
+
+    missing = {}
+    for col in df.columns:
+        na_count = df[col].isna().sum()
+        if df[col].dtype == object:
+            blank_count = df[col].astype(str).str.strip().eq('').sum()
+        else:
+            blank_count = 0
+        total_missing = na_count + blank_count
+        missing[col] = {
+            'NaN': int(na_count),
+            'Blank': int(blank_count),
+            'Total': int(total_missing)
+        }
+
+    print(f"Missing values report for '{excel_path}':\n")
+    for col, stats in missing.items():
+        if stats['Total'] > 0:
+            print(f"- {col}: {stats['NaN']} NaN, {stats['Blank']} blank → {stats['Total']} total")
+
+    total_cells = df.size
+    total_missing_cells = sum(stats['Total'] for stats in missing.values())
+    pct_missing = total_missing_cells / total_cells * 100
+    print(f"\nOverall: {total_missing_cells}/{total_cells} missing ({pct_missing:.2f}%)\n")
 
 if __name__ == "__main__":
     main()
-

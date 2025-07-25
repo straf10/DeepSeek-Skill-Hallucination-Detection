@@ -113,8 +113,8 @@ def main():
         help="Text file με ένα  querie ανά γραμμή"
     )
     parser.add_argument(
-        '--out', '-o', default='results_v2.jsonl',
-        help="Αρχείο εξόδου JSONL (default: results_v2.jsonl)"
+        '--out', '-o', default='results.jsonl',
+        help="Αρχείο εξόδου JSONL (default: results.jsonl)"
     )
     parser.add_argument(
         '--model', '-m', default=os.getenv('DEEPSEEK_MODEL', 'deepseek-r1:7b'),
