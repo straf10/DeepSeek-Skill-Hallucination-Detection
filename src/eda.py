@@ -1,5 +1,5 @@
 """
-Simple EDA Script
+EDA Script for SKILLAB API JOBS
 Generates bar charts for:
 1) Distribution of experience levels
 2) Number of postings per occupation URI

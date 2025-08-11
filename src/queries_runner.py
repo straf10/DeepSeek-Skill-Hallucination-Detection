@@ -28,7 +28,7 @@ class DeepseekModel:
         self.model_name = model_name
         self.base_url = base_url or os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434')
 
-    def generate(self, prompt, max_tokens=256, temperature=0.6, hide_think=True):
+    def generate(self, prompt, max_tokens=256, temperature=0.2, hide_think=True):
         """Καλεί το Ollama HTTP API στο /api/generate για single-turn inference."""
 
         prompt = make_concise_prompt(prompt,10)
@@ -113,8 +113,8 @@ def main():
         help="Text file με ένα  querie ανά γραμμή"
     )
     parser.add_argument(
-        '--out', '-o', default='results.jsonl',
-        help="Αρχείο εξόδου JSONL (default: results.jsonl)"
+        '--out', '-o', default='ds_query_results.jsonl',
+        help="Αρχείο εξόδου JSONL (default: ds_query_results.jsonl)"
     )
     parser.add_argument(
         '--model', '-m', default=os.getenv('DEEPSEEK_MODEL', 'deepseek-r1:7b'),
