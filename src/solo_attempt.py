@@ -11,7 +11,7 @@ from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 
 # ---------- Paths / Config ----------
-INPUT_QUERIES = r"C:\Python\THESIS\skillab_job_fetcher\input\queries_smoke"
+INPUT_QUERIES = r"C:\Python\THESIS\skillab_job_fetcher\input\queries_test"
 SKILLS= r"C:\Python\THESIS\skillab_job_fetcher\output\skill_counts.xlsx"
 OUT_JSONL = r"C:\Python\THESIS\skillab_job_fetcher\output\ds_query_bullets.jsonl"
 
@@ -131,6 +131,44 @@ def answer_with_allowed(query: str, allowed_set: set[str], max_points: int = 5) 
     prompt = make_constrained_prompt(query, allowed_set, max_points)
     return call_deepseek(prompt)
 
+def smoke_test(max_points: int=10, delay_s: float=0.0):
+    MIN_FREQ = 3
+    MAX_ALLOWED_SKILLS = 465
+
+    allowed = load_filtered_skills(MIN_FREQ, MAX_ALLOWED_SKILLS)
+    if not allowed:
+        print("Δεν βρέθηκαν allowed skills. Έλεγξε το COUNTS_XLSX ή τα φίλτρα.")
+        return
+
+    qpath = Path(INPUT_QUERIES)
+    if not qpath.exists():
+        print(f"Το αρχείο queries δεν βρέθηκε: {qpath}")
+        return
+
+    queries = load_queries()
+    if not queries:
+        print("Το αρχείο queries είναι κενό ή περιέχει μόνο σχόλια.")
+        return
+
+    print(f"Running {len(queries)} smoke queries...\n")
+    for i, q in enumerate(queries, 1):
+        tstamp = time.strftime("%Y-%m-%d %H:%M:%S")
+        start_time = time.perf_counter()
+
+        try:
+            ans = answer_with_allowed(q, allowed_set=allowed, max_points=max_points).strip()
+            elapsed = time.perf_counter() - start_time
+
+            if not ans:
+                ans = "- (no matching skills)"
+            print(f"[{i}/{len(queries)}] {tstamp} Q: {q}\n{ans}\n")
+
+        except Exception as e:
+            elapsed = (time.perf_counter() - start_time) if 't0' in locals() else 0.0
+            print(f"[{i}/{len(queries)}] Q: {q}\n! Error: {e}\n")
+
+        if delay_s > 0:
+            time.sleep(delay_s)
 # def main():
 #     query = "Top skills for a Python backend developer"
 #     prompt = make_prompt(query, max_points=5)
@@ -149,5 +187,8 @@ def main():
     print("=== Response ===")
     print(resp)
 
+# if __name__ == "__main__":
+#     main()
+
 if __name__ == "__main__":
-    main()
+    smoke_test(max_points=10, delay_s=0.5)
