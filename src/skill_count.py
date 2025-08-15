@@ -13,6 +13,12 @@
     """
 
 import pandas as pd
+from typing import Optional, List
+
+def _normalize_label(s: str) -> str:
+    # κατεβάζει πεζά, αφαιρεί περιττά κενά
+    return (s or "").strip().lower()
+
 
 def count_and_filter_skills(
     input_xlsx: str,
@@ -20,52 +26,68 @@ def count_and_filter_skills(
     sheet_name: str = 'job_skills',
     col_name: str = 'skill_labels',
     min_count: int = 2,
-    whitelist: list = None
+    whitelist: Optional[List[str]] = None
 ) -> None:
+    # Load
+    df = pd.read_excel(input_xlsx, sheet_name=sheet_name, dtype=str, engine="openpyxl")
+    if col_name not in df.columns:
+        raise ValueError(f"Column '{col_name}' not found in sheet '{sheet_name}'")
 
-    # Load the sheet
-    df = pd.read_excel(input_xlsx, sheet_name=sheet_name, dtype=str)
-    df[col_name] = df[col_name].fillna('')
-
-    # Split, strip and explode into individual skill labels
+    # Ασφαλές fill + split + strip + lower + explode
     skill_series = (
-        df[col_name]
+        df[col_name].fillna('')
+          .astype(str)
           .str.split(';')
-          .apply(lambda skills: [s.strip() for s in skills if s.strip()])
+          .apply(lambda xs: [_normalize_label(x) for x in xs if _normalize_label(x)])
           .explode()
     )
 
-    # Count occurrences
+    if skill_series.empty:
+        # Γράψε άδειο Excel με σωστά sheet names για να μη "σπάει" downstream
+        with pd.ExcelWriter(output_xlsx, engine='openpyxl') as writer:
+            pd.DataFrame(columns=['skill_label','count','cum_coverage']).to_excel(writer, sheet_name='skill_counts', index=False)
+            pd.DataFrame(columns=['skill_label','count','cum_coverage']).to_excel(writer, sheet_name='filtered_skills', index=False)
+        print("No skills found. Empty result written.")
+        return
+
+    # Μετρήσεις
     counts = (
-        skill_series
-        .value_counts()
+        skill_series.value_counts()
         .rename_axis('skill_label')
         .reset_index(name='count')
         .sort_values(by='count', ascending=False)
     )
 
-    # Compute cumulative coverage
-    total_occurrences = counts['count'].sum()
-    counts['cum_coverage'] = counts['count'].cumsum() / total_occurrences
+    # Cumulative coverage (safe division)
+    total_occurrences = int(counts['count'].sum())
+    counts['cum_coverage'] = counts['count'].cumsum() / total_occurrences if total_occurrences else 0.0
 
-    # Filter by threshold
+    # Φιλτράρισμα ( > min_count)
     filtered = counts[counts['count'] > min_count].copy()
 
-    # Re-add any whitelisted skills
+    # Whitelist (επιστρέφει normalized)
     if whitelist:
-        wl_df = counts[counts['skill_label'].isin(whitelist)]
-        filtered = pd.concat([filtered, wl_df]).drop_duplicates(subset=['skill_label'])
+        wl = [_normalize_label(w) for w in whitelist if _normalize_label(w)]
+        if wl:
+            wl_df = counts[counts['skill_label'].isin(wl)]
+            filtered = (
+                pd.concat([filtered, wl_df], ignore_index=True)
+                  .drop_duplicates(subset=['skill_label'])
+                  .sort_values(by='count', ascending=False)
+            )
 
-    # Write to new Excel with two sheets
+    # Write
     with pd.ExcelWriter(output_xlsx, engine='openpyxl') as writer:
         counts.to_excel(writer, sheet_name='skill_counts', index=False)
         filtered.to_excel(writer, sheet_name='filtered_skills', index=False)
 
-    # Print a brief summary
+    # Summary
+    coverage = (filtered['count'].sum() / total_occurrences) if total_occurrences else 0.0
     print(f"Total unique skills: {len(counts)}")
     print(f"Skills with count > {min_count}: {len(filtered)}")
-    print(f"Coverage by filtered skills: {filtered['count'].sum() / total_occurrences:.1%}")
+    print(f"Coverage by filtered skills: {coverage:.1%}")
     print(f"Results written to '{output_xlsx}'")
+
 
 
 if __name__ == "__main__":

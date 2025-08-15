@@ -19,7 +19,7 @@ THINK_RE = re.compile(r"<think>[\s\S]*?(?:</think>|$)", re.IGNORECASE)
 WHITESPACE_RE = re.compile(r"\s+")
 
 HIDE_THINK = True
-TEMPERATURE = 0.2
+TEMPERATURE = 0.3
 MAX_TOKENS = 512
 TIMEOUT = (5, 600)
 MODEL_NAME = "deepseek-r1:7b"
@@ -30,6 +30,15 @@ retry = Retry(total=3, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503,
 adapter = HTTPAdapter(max_retries=retry)
 session.mount("http://", adapter)
 session.mount("https://", adapter)
+
+# --- helper for JSON ---
+def write_jsonl(record: dict, path: str = OUT_JSONL) -> None:
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    with p.open("a", encoding="utf-8") as f:
+        json.dump(record, f, ensure_ascii=False)
+        f.write("\n")
+
 
 def strip_think(text: str) -> str:
     return THINK_RE.sub("", text or "").strip()
@@ -161,6 +170,13 @@ def smoke_test(max_points: int=10, delay_s: float=0.0):
 
             if not ans:
                 ans = "- (no matching skills)"
+
+            write_jsonl({
+                "timestamp": tstamp,
+                "question": q,
+                "answer": ans
+            })
+
             print(f"[{i}/{len(queries)}] {tstamp} Q: {q}\n{ans}\n")
 
         except Exception as e:
@@ -169,16 +185,6 @@ def smoke_test(max_points: int=10, delay_s: float=0.0):
 
         if delay_s > 0:
             time.sleep(delay_s)
-# def main():
-#     query = "Top skills for a Python backend developer"
-#     prompt = make_prompt(query, max_points=5)
-#     print("=== Prompt ===")
-#     print(prompt)
-#     print("==============")
-#
-#     response = call_deepseek(prompt)
-#     print("=== Response ===")
-#     print(response if response else "[No response received]")
 
 def main():
     allowed = load_filtered_skills(min_freq=3, max_allowed_skills=465)
@@ -187,8 +193,6 @@ def main():
     print("=== Response ===")
     print(resp)
 
-# if __name__ == "__main__":
-#     main()
 
 if __name__ == "__main__":
     smoke_test(max_points=10, delay_s=0.5)

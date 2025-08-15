@@ -5,7 +5,7 @@ import requests as req
 import pandas as pd
 import logging
 import itertools
-import re
+# import re
 
 from pathlib import Path
 from dotenv import load_dotenv
@@ -16,7 +16,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 API_BASE = "https://skillab-tracker.csd.auth.gr/api"
-VERIFY_SSL = False  # self‑signed cert (test server)
+VERIFY_SSL = False
 
 ISCO_URIS = [
     "http://data.europa.eu/esco/isco/C2511",
@@ -25,6 +25,7 @@ ISCO_URIS = [
     "http://data.europa.eu/esco/isco/C2514",
 ]
 
+# ***CONFIG***
 PAGE_SIZE = 100
 MAX_PAGES = 7
 CHUNK = 50
@@ -46,15 +47,15 @@ _TOKEN:str | None = None
 log = logging.getLogger(__name__)
 
 def main():
-    print("File:", os.path.abspath(__file__))
-    print("Executable:", sys.executable)
-    print("Version:", sys.version)
+    log.info("File: %s", os.path.abspath(__file__))
+    log.info("Executable: %s", sys.executable)
+    log.info("Python: %s", sys.version)
+
     logging.basicConfig(level=logging.DEBUG)
+
     jobs = fetch_jobs()
-    print(f"Fetched {len(jobs)} unique jobs")
+    log.info("Fetched %d unique jobs", len(jobs))
     export_excel(jobs, outdir=Path("../output"))
-    #excel_path = r"C:\Python\THESIS\skillab_job_fetcher\output\output.xlsx"
-    #report_missing_values(excel_path)
 
 def _refresh_token() -> None:
     """Ανανεώνει / παίρνει JWT token και το εισάγει στα headers του session."""
@@ -63,12 +64,11 @@ def _refresh_token() -> None:
     resp.raise_for_status()
     _TOKEN = resp.text.strip('"')
     _SESSION.headers.update({"Authorization": f"Bearer {_TOKEN}"})
+    log.info("Authenticated and token refreshed.")
 
 def _api_post_form(endpoint: str, form: List[Tuple[str, str]], params: Optional[Dict[str, str]] = None, timeout: int = 30) -> req.Response:
-    """
-    POST x-www-form-urlencoded με αυτόματο retry
-    και αυτόματο refresh JWT αν λάβουμε 401.
-    """
+    """POST x-www-form-urlencoded με αυτόματο retry και αυτόματο refresh JWT αν λάβουμε 401."""
+
     if _TOKEN is None:
         _refresh_token()
 
@@ -83,8 +83,9 @@ def _api_post_form(endpoint: str, form: List[Tuple[str, str]], params: Optional[
     if resp.status_code == 401:
         log.info("Token expired, refreshing and retrying once!")
         _refresh_token()
-        # επαναχρησιμοποιούμε το αρχικό Request object
-        resp = _SESSION.send(resp.request)
+        headers = _SESSION.headers.copy()
+        headers["Content-Type"] = "application/x-www-form-urlencoded"
+        resp = _SESSION.post(url, params=params, data=form, headers=headers, timeout=timeout)
 
     resp.raise_for_status()
     return resp
@@ -222,7 +223,7 @@ def export_excel(jobs: List[Dict], *, outdir: Path) -> None:
         skills_df.to_excel(writer, sheet_name="skills", index=False)
         js_df.to_excel(writer, sheet_name="job_skills", index=False)
 
-    print(f"[OK] Excel file written → {output_path.resolve()}")
+    log.info("[OK] Excel file written → %s", output_path.resolve())
 
 def report_missing_values(excel_path):
     """
@@ -245,15 +246,16 @@ def report_missing_values(excel_path):
             'Total': int(total_missing)
         }
 
-    print(f"Missing values report for '{excel_path}':\n")
+    log.info("Missing values report for '%s':", excel_path)
     for col, stats in missing.items():
         if stats['Total'] > 0:
-            print(f"- {col}: {stats['NaN']} NaN, {stats['Blank']} blank → {stats['Total']} total")
+            log.info("- %s: %d NaN, %d blank → %d total",
+                     col, stats['NaN'], stats['Blank'], stats['Total'])
 
     total_cells = df.size
     total_missing_cells = sum(stats['Total'] for stats in missing.values())
     pct_missing = total_missing_cells / total_cells * 100
-    print(f"\nOverall: {total_missing_cells}/{total_cells} missing ({pct_missing:.2f}%)\n")
+    log.info("Overall: %d/%d missing (%.2f%%)", total_missing_cells, total_cells, pct_missing)
 
 if __name__ == "__main__":
     main()
