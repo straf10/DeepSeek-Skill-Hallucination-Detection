@@ -11,15 +11,15 @@ from urllib3.util.retry import Retry
 from requests.adapters import HTTPAdapter
 
 # ---------- Paths / Config ----------
-INPUT_QUERIES = r"C:\Python\THESIS\skillab_job_fetcher\input\queries_test"
+INPUT_QUERIES = r"C:\Python\THESIS\skillab_job_fetcher\input\baseline"
 SKILLS= r"C:\Python\THESIS\skillab_job_fetcher\output\skill_counts.xlsx"
-OUT_JSONL = r"C:\Python\THESIS\skillab_job_fetcher\output\ds_query_bullets.jsonl"
+OUT_JSONL = r"C:\Python\THESIS\skillab_job_fetcher\output\ds_list2_response.jsonl"
 
 THINK_RE = re.compile(r"<think>[\s\S]*?(?:</think>|$)", re.IGNORECASE)
 WHITESPACE_RE = re.compile(r"\s+")
 
 HIDE_THINK = True
-TEMPERATURE = 0.3
+TEMPERATURE = 0.2
 MAX_TOKENS = 512
 TIMEOUT = (5, 600)
 MODEL_NAME = "deepseek-r1:7b"
@@ -129,11 +129,17 @@ def make_constrained_prompt(query: str, allowed_set: set[str], max_points: int) 
     skills_block = "\n".join(f"- {s}" for s in sorted(allowed_set))
     return (
         "You are a skill matching expert.\n"
-        f"Select up to {max_points} skills STRICTLY from the list below.\n"
-        "Output ONLY bullet points, one skill per bullet, EXACTLY as written.\n"
-        "Do NOT invent, do NOT rephrase. Do NOT reveal chain-of-thought.\n\n"
-        f"Question: {query}\n\n"
-        f"ALLOWED SKILLS:\n{skills_block}\n"
+        f"From the allowed skills below, return ONLY the {max_points} most relevant skills.\n"
+        "RULES:\n"
+        f"1) Output AT MOST {max_points} lines.\n"
+        "2) ONE skill per line, starting with '- '.\n"
+        "3) Use each skill EXACTLY as written in the allowed list. No synonyms, no rephrasing.\n"
+        "4) Rank by best fit to the QUESTION. Prioritize concrete technical skills.\n"
+        f"5) STOP after {max_points} lines. Do not output more.\n"
+        "6) If no skills match, output a single line: '- (no matching skills)'.\n\n"
+        f"QUESTION:\n{query}\n\n"
+        "ALLOWED SKILLS:\n"
+        f"{skills_block}\n"
     )
 
 def answer_with_allowed(query: str, allowed_set: set[str], max_points: int = 5) -> str:
@@ -146,17 +152,17 @@ def smoke_test(max_points: int=10, delay_s: float=0.0):
 
     allowed = load_filtered_skills(MIN_FREQ, MAX_ALLOWED_SKILLS)
     if not allowed:
-        print("Δεν βρέθηκαν allowed skills. Έλεγξε το COUNTS_XLSX ή τα φίλτρα.")
+        print("No allowed skills found. Check COUNTS_XLSX or filters.")
         return
 
     qpath = Path(INPUT_QUERIES)
     if not qpath.exists():
-        print(f"Το αρχείο queries δεν βρέθηκε: {qpath}")
+        print(f"The file cannot be found: {qpath}")
         return
 
     queries = load_queries()
     if not queries:
-        print("Το αρχείο queries είναι κενό ή περιέχει μόνο σχόλια.")
+        print("Queries file is empty!")
         return
 
     print(f"Running {len(queries)} smoke queries...\n")
@@ -186,13 +192,5 @@ def smoke_test(max_points: int=10, delay_s: float=0.0):
         if delay_s > 0:
             time.sleep(delay_s)
 
-def main():
-    allowed = load_filtered_skills(min_freq=3, max_allowed_skills=465)
-    query = "Top skills for a Python backend developer"
-    resp = answer_with_allowed(query, allowed, max_points=5)
-    print("=== Response ===")
-    print(resp)
-
-
 if __name__ == "__main__":
-    smoke_test(max_points=10, delay_s=0.5)
+    smoke_test(max_points=10, delay_s=0.8)
