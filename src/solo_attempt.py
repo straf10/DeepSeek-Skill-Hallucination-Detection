@@ -26,7 +26,7 @@ MODEL_NAME = "deepseek-r1:7b"
 BASE_URL = "http://localhost:11434"
 
 session = requests.Session()
-retry = Retry(total=3, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504], allowed_methods=["POST"])
+retry = Retry(total=3, backoff_factor=0.5, status_forcelist=[429, 500, 502, 503, 504], allowed_methods=frozenset({"POST"}))
 adapter = HTTPAdapter(max_retries=retry)
 session.mount("http://", adapter)
 session.mount("https://", adapter)
@@ -89,16 +89,6 @@ def load_filtered_skills( min_freq: int = 3, max_allowed_skills: int = 500) -> s
     except Exception as e:
         logging.error(f"Error loading skills: {e}")
         return set()
-
-def make_prompt(query: str, max_points: int) -> str:
-    """Always use open prompt for better generation quality"""
-    return (
-        "You are a skill matching expert. \n"
-        f"Answer the following question in up to {max_points} bullet points.\n"
-        "Only output bullet points (one skill per bullet). No explanations.\n"
-        "Do NOT reveal chain-of-thought.\n\n"
-        f"Question: {query}\n"
-    )
 
 def call_deepseek(prompt: str) -> str:
     payload = {
