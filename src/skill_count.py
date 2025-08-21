@@ -13,11 +13,15 @@
     """
 
 import pandas as pd
+import re
 from typing import Optional, List
 
+WS_RE = re.compile(r"\s+")
+
 def _normalize_label(s: str) -> str:
-    # κατεβάζει πεζά, αφαιρεί περιττά κενά
-    return (s or "").strip().lower()
+    s = (s or "").strip().lower()
+    s = WS_RE.sub(" ", s)  # συμπίεση συνεχόμενων κενών σε ένα space
+    return s
 
 
 def count_and_filter_skills(
