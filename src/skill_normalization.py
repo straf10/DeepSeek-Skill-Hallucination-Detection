@@ -66,23 +66,20 @@ def parse_answer_to_skill_list(answer_text: str) -> List[str]:
 
     skills: List[str] = []
 
-    # 1) Γραμμή-γραμμή: πιάσε bullets/αριθμημένα
     for raw in txt.splitlines():
         m = BULLET_LINE_RE.match(raw)
         if m:
             skills.append(norm(m.group(1)))
         else:
-            # Αν μια γραμμή δεν έχει bullet, αλλά μοιάζει με “X, Y, Z”
-            # σπάσ’ την με κόμμα ως fallback (σπάνιο αλλά βοηθάει)
             if "," in raw and len(raw) < 200:
                 parts = [norm(p) for p in raw.split(",")]
                 skills.extend([p for p in parts if p])
             else:
-                # και το κλασικό "- " που ίσως δεν πιάστηκε από regex (π.χ. περίεργο unicode bullet)
+
                 if raw.strip().startswith("- "):
                     skills.append(norm(raw.strip()[2:]))
 
-    # 2) Αφαίρεσε άδειες και διπλότυπα
+    # Remove empty - duplicates
     skills = [s for s in skills if s]
     skills = _dedup_preserve_order(skills)
 
@@ -112,39 +109,60 @@ def load_open_or_closed(jsonl_path: str | Path) -> pd.DataFrame:
 # ---------- Parsing of “job samples” answers ----------
 def _extract_json_array(text: str) -> List[Dict[str, Any]]:
     """
-    Προσπαθεί να απομονώσει *πρώτο* JSON array από το text και να το φορτώσει.
-    Υποστηρίζει περιπτώσεις με “json\n[ ... ]”, code fences, κ.λπ.
+    Επιστρέφει το *πρώτο* JSON array μέσα στο text.
+    Αν το array είναι κομμένο (λείπει τελικό ] ή λείπει μέρος τελευταίου αντικειμένου),
+    γίνεται salvage: κόψιμο μέχρι το τελευταίο πλήρες '}' και κλείσιμο με ']'.
     """
     if not text:
         return []
 
     t = strip_meta(text)
     t = re.sub(r"^\s*json\s*", "", t, flags=re.IGNORECASE)
+    t = t.replace("```", "").strip()
 
     start = t.find("[")
     end   = t.rfind("]")
-    if start == -1 or end == -1 or end <= start:
-        return []
-
-    candidate = t[start:end+1].strip()
-
-    candidate = candidate.replace("```", "").strip()
-
-    try:
-        data = json.loads(candidate)
-        if isinstance(data, list):
-            return data
-    except json.JSONDecodeError:
-
-        candidate2 = re.sub(r",(\s*[\]\}])", r"\1", candidate)
+    if start != -1 and end != -1 and end > start:
+        candidate = t[start:end+1].strip()
         try:
-            data = json.loads(candidate2)
+            data = json.loads(candidate)
             if isinstance(data, list):
                 return data
         except json.JSONDecodeError:
-            pass
+
+            candidate2 = re.sub(r",(\s*[\]\}])", r"\1", candidate)
+            try:
+                data = json.loads(candidate2)
+                if isinstance(data, list):
+                    return data
+            except json.JSONDecodeError:
+                pass
+
+    # --- Fallback for unfinished anwers ---
+    if start == -1:
+        return []
+
+    rest = t[start:]
+    positions = [m.start() for m in re.finditer(r"\}", rest)]
+    for pos in reversed(positions[-20:]):
+        cand = rest[:pos+1]
+        cand = re.sub(r",\s*$", "", cand)
+
+        if not cand.lstrip().startswith('['):
+            cand = '[' + cand
+        if not cand.rstrip().endswith(']'):
+            cand = cand + ']'
+
+        cand = re.sub(r",(\s*[\]\}])", r"\1", cand)
+        try:
+            data = json.loads(cand)
+            if isinstance(data, list):
+                return data
+        except json.JSONDecodeError:
+            continue
 
     return []
+
 
 def load_job_samples(jsonl_path: str | Path) -> pd.DataFrame:
     """
@@ -205,7 +223,6 @@ def write_excel(
     out_path = Path(out_xlsx)
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    # Ελαφρύ tidy:
     open_df   = open_df.fillna("")
     closed_df = closed_df.fillna("")
     jobs_df   = jobs_df.fillna({"confidence": pd.NA, "evidence": ""})
