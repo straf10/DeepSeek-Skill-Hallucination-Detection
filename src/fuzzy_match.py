@@ -1,18 +1,3 @@
-# -------------------------------------------------------------
-# Φορτώνει:
-#   - normalised.xlsx (open_mode, closed_mode, job_samples)
-#   - skill_counts.xlsx (filtered_skills ή όλα τα skills)
-# Βήματα:
-#   1) Exact match με allowed set
-#   2) Για όσα ΔΕΝ κάνουν exact, επιστρέφει TOP_K fuzzy υποψήφιους
-#      με score 0..100 (χρησιμοποιούμε RapidFuzz fuzz.ratio).
-#   3) Γράφει 3 sheets με ΜΟΝΟ τα non-exact:
-#      - open_mode_candidates
-#      - closed_mode_candidates
-#      - job_samples_candidates
-#   Κάθε γραμμή έχει: original_skill, top1/2/3 matches + scores,
-#   band (High/Medium/Low/VeryLow), και λίγο context (question preview / evidence).
-# -------------------------------------------------------------
 import pandas as pd
 import numpy as np
 
