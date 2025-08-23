@@ -21,36 +21,27 @@ INPUT = r"C:\Python\THESIS\skillab_job_fetcher\output\data.xlsx"
 OUTPUT_LOG_REG = r"C:\Python\THESIS\skillab_job_fetcher\output\log_reg_results"
 
 def load_data(xlsx_path: str) -> pd.DataFrame:
-    df = pd.read_excel(xlsx_path, dtype=str)
+    df = pd.read_excel(xlsx_path, dtype={"original_skill": str, "manual_label": str, "source": str})
 
-    cols_lower = {c.lower(): c for c in df.columns}
     need = {"original_skill", "manual_label", "source"}
-    if not need.issubset(cols_lower.keys()):
-        raise ValueError(f"Missing columns. Need: {sorted(need)}. Found: {sorted(df.columns)}")
+    missing = need - set(df.columns)
+    if missing:
+        raise ValueError(f"Missing columns: {sorted(missing)} (expected: {sorted(need)})")
 
-    df = df.rename(columns={
-        cols_lower["original_skill"]: "original_skill",
-        cols_lower["manual_label"]: "manual_label",
-        cols_lower["source"]: "source",
-    })
-
-    df["original_skill"] = df["original_skill"].astype(str)
-    df["manual_label"] = df["manual_label"].astype(str).str.strip().str.lower()
-    df["source"] = df["source"].astype(str).str.strip()
-    df = df[df["original_skill"].str.strip().astype(bool)].reset_index(drop=True)
-    return df
+    df["manual_label"] = df["manual_label"].astype(str).str.strip().str.lower().str.replace(r"[^a-z0-9]+", "", regex=True)
+    df = df[df["original_skill"].astype(str).str.strip().astype(bool)].reset_index(drop=True)
+    return df[["original_skill", "manual_label", "source"]]
 
 def to_binary_labels(y: pd.Series) -> pd.Series:
-    # H0 μένει H0, οτιδήποτε που ξεκινά με 'h1' (h1, h1a, h1b, ...) -> H1
+    # H0 -> H0 | H1x -> H1
     yb = y.apply(lambda z: "h0" if z == "h0" else ("h1" if str(z).startswith("h1") else "other"))
-    # Κρατάμε μόνο H0/H1
     mask = yb.isin(["h0", "h1"])
     return yb[mask], mask
 
 def build_vectorizer() -> TfidfVectorizer:
     return TfidfVectorizer(
         analyzer="word",
-        ngram_range=(1, 2),
+        ngram_range=(1, 3),
         min_df=1,
         sublinear_tf=True,
         norm="l2",
@@ -70,9 +61,7 @@ def train_eval_lr(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag:
     lr = LogisticRegression(
         max_iter=2000,
         class_weight="balanced",
-        solver="lbfgs",       # multinomial support
-        multi_class="auto",
-        n_jobs=None
+        solver="lbfgs",
     )
     pipe = make_pipeline(vec, lr)
 
@@ -108,7 +97,7 @@ def train_eval_lr(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag:
     # Confusion matrix CSV
     pd.DataFrame(cm, index=labels_order, columns=labels_order).to_csv(out_base.with_suffix(".confusion.csv"), encoding="utf-8", index=True)
 
-    # Flat summary CSV (macro/weighted/micro)
+    # summary CSV (macro/weighted/micro)
     summary_row = pd.DataFrame([{
         "scenario": tag,
         "model": "logistic_regression",
@@ -135,7 +124,6 @@ def train_eval_lr(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag:
     model_path = out_base.with_suffix(".joblib")
     joblib.dump(pipe, model_path)
 
-    # Επιστρέφουμε και το pipeline για optional feature inspection
     return {
         "pipe": pipe,
         "labels_order": labels_order,
@@ -196,7 +184,7 @@ if __name__ == "__main__":
 
     res_bin = train_eval_lr(X_bin, y_bin, labels_bin, tag="binary_h0_vs_h1")
 
-    # Αποθήκευση top features (προαιρετικό, βοηθά την ανάλυση στην εργασία)
+    # Αποθήκευση top features
     try:
         top_h1, top_h0 = top_features_binary(res_bin["pipe"], n=25)
         with open(Path(OUTPUT_LOG_REG) / "lr_binary_top_features.json", "w", encoding="utf-8") as f:
@@ -209,9 +197,9 @@ if __name__ == "__main__":
 
     # ---------- Multiclass (H0 vs H1a…e)
     y_multi = y_full.copy()
-    # Κρατάμε όσες κλάσεις έχουν τουλάχιστον 5 δείγματα (για σταθερό CV/split)
+    # Κρατάμε όσες κλάσεις έχουν τουλάχιστον 4 δείγματα (για σταθερό CV/split)
     cls_counts = y_multi.value_counts()
-    keep_classes = cls_counts[cls_counts >= 5].index.tolist()
+    keep_classes = cls_counts[cls_counts >= 4].index.tolist()
     mask_multi = y_multi.isin(keep_classes)
     X_multi = X_text[mask_multi].reset_index(drop=True)
     y_multi = y_multi[mask_multi].reset_index(drop=True)
@@ -220,7 +208,7 @@ if __name__ == "__main__":
     if len(labels_multi) >= 2:
         res_multi = train_eval_lr(X_multi, y_multi, labels_multi, tag="multiclass_h0_h1subtypes")
 
-        # Top features per class (προαιρετικό)
+        # Top features per class
         try:
             tops = top_features_multiclass(res_multi["pipe"], labels_multi, n=15)
             with open(Path(OUTPUT_LOG_REG) / "lr_multiclass_top_features.json", "w", encoding="utf-8") as f:
