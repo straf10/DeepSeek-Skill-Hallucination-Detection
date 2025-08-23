@@ -197,9 +197,9 @@ if __name__ == "__main__":
 
     # ---------- Multiclass (H0 vs H1a…e)
     y_multi = y_full.copy()
-    # Κρατάμε όσες κλάσεις έχουν τουλάχιστον 4 δείγματα (για σταθερό CV/split)
+    # Κρατάμε όσες κλάσεις έχουν τουλάχιστον 5 δείγματα (για σταθερό CV/split)
     cls_counts = y_multi.value_counts()
-    keep_classes = cls_counts[cls_counts >= 4].index.tolist()
+    keep_classes = cls_counts[cls_counts >= 5].index.tolist()
     mask_multi = y_multi.isin(keep_classes)
     X_multi = X_text[mask_multi].reset_index(drop=True)
     y_multi = y_multi[mask_multi].reset_index(drop=True)
