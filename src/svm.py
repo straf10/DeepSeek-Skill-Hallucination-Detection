@@ -37,7 +37,7 @@ def train_eval_svm(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag
     Xtr, Xte, ytr, yte = train_test_split(X_text, y, test_size=0.2, stratify=y, random_state=42)
 
     vec = build_vectorizer()
-    svm = LinearSVC(class_weight="balanced", max_iter=5000, random_state=42)
+    svm = LinearSVC(C=1.0, class_weight="balanced", max_iter=5000, random_state=42)
     pipe = make_pipeline(vec, svm)
 
     # CV με auto n_splits για να αποφεύγονται warnings
