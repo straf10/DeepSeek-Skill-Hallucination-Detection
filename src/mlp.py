@@ -4,6 +4,7 @@ from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.pipeline import make_pipeline
 from sklearn.neural_network import MLPClassifier
+from sklearn.utils.class_weight import compute_class_weight
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, precision_recall_fscore_support
 
 # ---------- Paths / Config ----------
@@ -29,10 +30,17 @@ def to_binary_labels(y: pd.Series):
     return yb[mask], mask
 
 def build_vectorizer() -> TfidfVectorizer:
-    return TfidfVectorizer(analyzer="word", ngram_range=(1,3), min_df=1, sublinear_tf=True, norm="l2", lowercase=True)
+    return TfidfVectorizer(analyzer="word", ngram_range=(1,2), min_df=2, sublinear_tf=True, norm="l2", lowercase=True)
 
 def train_eval_mlp(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag: str):
     Xtr, Xte, ytr, yte = train_test_split(X_text, y, test_size=0.2, stratify=y, random_state=42)
+
+    # --- class weights μέσω sample_weight ---
+    classes = np.unique(ytr)
+    cw = compute_class_weight(class_weight="balanced", classes=classes, y=ytr)
+    class_weight_map = {cls: w for cls, w in zip(classes, cw)}
+    sw = ytr.map(class_weight_map).to_numpy()
+
 
     vec = build_vectorizer()
     mlp = MLPClassifier(
@@ -56,7 +64,7 @@ def train_eval_mlp(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag
     kf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     cv_scores = cross_val_score(pipe, Xtr, ytr, scoring="f1_macro", cv=kf, n_jobs=-1)
 
-    pipe.fit(Xtr, ytr)
+    pipe.fit(Xtr, ytr, mlpclassifier__sample_weight=sw)
     ypred = pipe.predict(Xte)
 
     report_dict = classification_report(yte, ypred, labels=labels_order, output_dict=True, zero_division=0)
