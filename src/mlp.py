@@ -6,6 +6,11 @@ from sklearn.pipeline import make_pipeline
 from sklearn.neural_network import MLPClassifier
 from sklearn.utils.class_weight import compute_class_weight
 from sklearn.metrics import classification_report, confusion_matrix, accuracy_score, precision_recall_fscore_support
+from imblearn.pipeline import Pipeline as ImbPipeline
+from imblearn.over_sampling import SMOTE
+from sklearn.decomposition import TruncatedSVD
+from sklearn.preprocessing import StandardScaler
+
 
 # ---------- Paths / Config ----------
 INPUT = r"C:\Python\THESIS\skillab_job_fetcher\output\data.xlsx"
@@ -32,7 +37,8 @@ def to_binary_labels(y: pd.Series):
 def build_vectorizer() -> TfidfVectorizer:
     return TfidfVectorizer(analyzer="word", ngram_range=(1,2), min_df=2, sublinear_tf=True, norm="l2", lowercase=True)
 
-def train_eval_mlp(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag: str):
+def train_eval_mlp(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag: str, oversample: bool = False):
+
     Xtr, Xte, ytr, yte = train_test_split(X_text, y, test_size=0.2, stratify=y, random_state=42)
 
     # --- class weights μέσω sample_weight ---
@@ -41,15 +47,14 @@ def train_eval_mlp(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag
     class_weight_map = {cls: w for cls, w in zip(classes, cw)}
     sw = ytr.map(class_weight_map).to_numpy()
 
-
     vec = build_vectorizer()
     mlp = MLPClassifier(
-        hidden_layer_sizes=(256, ),
+        hidden_layer_sizes=(256,),
         activation="relu",
         solver="adam",
-        alpha=1e-4,             # L2
+        alpha=1e-4,
         learning_rate="adaptive",
-        max_iter=400,           # με early stopping
+        max_iter=400,
         early_stopping=False,
         n_iter_no_change=20,
         validation_fraction=0.1,
@@ -57,14 +62,30 @@ def train_eval_mlp(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag
         random_state=42,
         verbose=False,
     )
-    pipe = make_pipeline(vec, mlp)
+
+    if oversample:
+        # TF‑IDF (sparse) → SVD (dense) → Standardize → SMOTE → MLP
+        svd = TruncatedSVD(n_components=300, random_state=42)
+        smote = SMOTE(k_neighbors=1, random_state=42)
+        pipe = ImbPipeline([
+            ("tfidfvectorizer", vec),
+            ("svd", svd),
+            ("scaler", StandardScaler()),  # μετά το SVD (dense)
+            ("smote", smote),
+            ("mlpclassifier", mlp),
+        ])
+    else:
+        pipe = make_pipeline(vec, mlp)
 
     min_class_size = ytr.value_counts().min()
     n_splits = int(max(2, min(5, min_class_size)))
     kf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     cv_scores = cross_val_score(pipe, Xtr, ytr, scoring="f1_macro", cv=kf, n_jobs=-1)
 
-    pipe.fit(Xtr, ytr, mlpclassifier__sample_weight=sw)
+    if oversample:
+        pipe.fit(Xtr, ytr)
+    else:
+        pipe.fit(Xtr, ytr, mlpclassifier__sample_weight=sw)
     ypred = pipe.predict(Xte)
 
     report_dict = classification_report(yte, ypred, labels=labels_order, output_dict=True, zero_division=0)
@@ -124,7 +145,7 @@ if __name__ == "__main__":
     X_bin = X_text[mask_bin].reset_index(drop=True)
     y_bin = y_bin.reset_index(drop=True)
     labels_bin = sorted(y_bin.unique())
-    train_eval_mlp(X_bin, y_bin, labels_bin, tag="binary_h0_vs_h1")
+    train_eval_mlp(X_bin, y_bin, labels_bin, tag="binary_h0_vs_h1", oversample=False)
 
     # ----- Multiclass (≥5 δείγματα/κλάση)
     y_multi = y_full.copy()
@@ -136,7 +157,7 @@ if __name__ == "__main__":
     labels_multi = sorted(y_multi.unique())
 
     if len(labels_multi) >= 2:
-        train_eval_mlp(X_multi, y_multi, labels_multi, tag="multiclass_h0_h1subtypes")
+        train_eval_mlp(X_multi, y_multi, labels_multi, tag="multiclass_h0_h1subtypes", oversample=True)
     else:
         print("[INFO] Multiclass MLP skipped (not enough classes).")
 
