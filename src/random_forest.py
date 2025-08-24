@@ -43,8 +43,8 @@ def to_binary_labels(y: pd.Series) -> pd.Series:
 def build_vectorizer() -> TfidfVectorizer:
     return TfidfVectorizer(
         analyzer="word",
-        ngram_range=(1, 3),
-        min_df=1,
+        ngram_range=(1, 2),
+        min_df=2,
         sublinear_tf=True,
         norm="l2",
         lowercase=True,
@@ -60,9 +60,10 @@ def train_eval_rf(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag:
     vec = build_vectorizer()
     rf = RandomForestClassifier(
         n_estimators=500,
-        max_depth=None,
-        min_samples_split=2,
-        min_samples_leaf=1,
+        max_depth=40,
+        min_samples_split=5,
+        min_samples_leaf=2,
+        max_features="sqrt",
         class_weight="balanced",
         n_jobs=-1,
         random_state=42,
@@ -70,7 +71,9 @@ def train_eval_rf(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag:
     pipe = make_pipeline(vec, rf)
 
     # 5-fold CV (macro-F1) στο train
-    kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    min_class_size = ytr.value_counts().min()
+    n_splits = int(max(2, min(5, min_class_size)))
+    kf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     cv_scores = cross_val_score(pipe, Xtr, ytr, scoring="f1_macro", cv=kf, n_jobs=-1)
 
     # Train + Test
