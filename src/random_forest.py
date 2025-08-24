@@ -3,6 +3,9 @@ import numpy as np
 import pandas as pd
 import joblib
 
+from imblearn.pipeline import Pipeline as ImbPipeline
+from imblearn.over_sampling import SMOTE
+from sklearn.decomposition import TruncatedSVD
 from pathlib import Path
 from sklearn.model_selection import train_test_split, StratifiedKFold, cross_val_score
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -52,7 +55,7 @@ def build_vectorizer() -> TfidfVectorizer:
     )
 
 # ---------- Train/Eval ----------
-def train_eval_rf(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag: str):
+def train_eval_rf(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag: str, *, oversample: bool = False):
     Xtr, Xte, ytr, yte = train_test_split(
         X_text, y, test_size=0.2, stratify=y, random_state=42
     )
@@ -60,20 +63,30 @@ def train_eval_rf(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag:
     vec = build_vectorizer()
     rf = RandomForestClassifier(
         n_estimators=500,
-        max_depth=40,
-        min_samples_split=5,
-        min_samples_leaf=2,
-        max_features="sqrt",
+        max_depth=None,
+        min_samples_split=2,
+        min_samples_leaf=1,
+        # max_features="sqrt",
         class_weight="balanced",
         n_jobs=-1,
         random_state=42,
     )
-    pipe = make_pipeline(vec, rf)
+    if oversample:
+        # TF‑IDF (sparse) -> SVD (dense) -> SMOTE -> RF
+        svd = TruncatedSVD(n_components=300, random_state=42)
+        smote = SMOTE(k_neighbors=1, random_state=42)
+        pipe = ImbPipeline([
+            ("tfidfvectorizer", vec),
+            ("svd", svd),
+            ("smote", smote),
+            ("randomforestclassifier", rf),
+        ])
+    else:
+        # original pipeline
+        pipe = make_pipeline(vec, rf)
 
     # 5-fold CV (macro-F1) στο train
-    min_class_size = ytr.value_counts().min()
-    n_splits = int(max(2, min(5, min_class_size)))
-    kf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+    kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
     cv_scores = cross_val_score(pipe, Xtr, ytr, scoring="f1_macro", cv=kf, n_jobs=-1)
 
     # Train + Test
@@ -168,7 +181,7 @@ if __name__ == "__main__":
     y_bin = y_bin.reset_index(drop=True)
     labels_bin = sorted(y_bin.unique())
 
-    res_bin = train_eval_rf(X_bin, y_bin, labels_bin, tag="binary_h0_vs_h1")
+    res_bin = train_eval_rf(X_bin, y_bin, labels_bin, tag="binary_h0_vs_h1", oversample=False)
     try:
         export_feature_importances(
             res_bin["pipe"],
@@ -188,7 +201,11 @@ if __name__ == "__main__":
     labels_multi = sorted(y_multi.unique())
 
     if len(labels_multi) >= 2:
-        res_multi = train_eval_rf(X_multi, y_multi, labels_multi, tag="multiclass_h0_h1subtypes")
+        res_multi = train_eval_rf(
+            X_multi, y_multi, labels_multi,
+            tag="multiclass_h0_h1subtypes",
+            oversample=True,  # +++ enable SMOTE for multiclass +++
+        )
         try:
             export_feature_importances(
                 res_multi["pipe"],
