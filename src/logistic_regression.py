@@ -41,7 +41,7 @@ def to_binary_labels(y: pd.Series) -> pd.Series:
 def build_vectorizer() -> TfidfVectorizer:
     return TfidfVectorizer(
         analyzer="word",
-        ngram_range=(1, 3),
+        ngram_range=(1, 2),
         min_df=1,
         sublinear_tf=True,
         norm="l2",
@@ -49,9 +49,21 @@ def build_vectorizer() -> TfidfVectorizer:
         stop_words=None,
     )
 
-def train_eval_lr(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag: str):
+def tune_lr_C(X_text, y, Cs=(0.01, 0.1, 0.5, 1, 2, 5, 10)):
+    kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+    best = (None, -1.0)
+    for C in Cs:
+        lr = LogisticRegression(max_iter=2000, class_weight="balanced", solver="lbfgs", C=C)
+        pipe = make_pipeline(build_vectorizer(), lr)
+        scores = cross_val_score(pipe, X_text, y, scoring="f1_macro", cv=kf, n_jobs=-1)
+        mean = scores.mean()
+        if mean > best[1]:
+            best = (C, mean)
+    return best
+
+def train_eval_lr(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag: str, C: float = 1.0):
     """
-    Εκπαίδευση + αξιολόγηση Logistic Regression για ένα σενάριο (binary ή multiclass)
+    Training + Evaluation of Logistic Regression for binary / multiclass scenario
     """
     Xtr, Xte, ytr, yte = train_test_split(
         X_text, y, test_size=0.2, stratify=y, random_state=42
@@ -62,6 +74,7 @@ def train_eval_lr(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag:
         max_iter=2000,
         class_weight="balanced",
         solver="lbfgs",
+        C=C,
     )
     pipe = make_pipeline(vec, lr)
 
@@ -80,7 +93,7 @@ def train_eval_lr(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag:
     cm = confusion_matrix(yte, ypred, labels=labels_order)
 
     # Save reports
-    out_base = Path(OUTPUT_LOG_REG) / f"lr_{tag}"
+    out_base = Path(OUTPUT_LOG_REG) / f"lr_{tag}_C{C}"
     out_base.parent.mkdir(parents=True, exist_ok=True)
 
     with (out_base.with_suffix(".json")).open("w", encoding="utf-8") as f:
@@ -110,7 +123,6 @@ def train_eval_lr(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag:
         "f1_weighted": report_dict["weighted avg"]["f1-score"],
         "precision_weighted": report_dict["weighted avg"]["precision"],
         "recall_weighted": report_dict["weighted avg"]["recall"],
-        # Micro-F1 ~ accuracy για πλήρη πρόβλεψη
         "f1_micro": acc,
     }])
     summary_csv = Path(OUTPUT_LOG_REG) / "lr_summary_metrics.csv"
@@ -120,7 +132,6 @@ def train_eval_lr(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag:
     else:
         summary_row.to_csv(summary_csv, index=False)
 
-    # Save fitted pipeline (vectorizer + logistic regression) για reuse
     model_path = out_base.with_suffix(".joblib")
     joblib.dump(pipe, model_path)
 
@@ -138,15 +149,13 @@ def train_eval_lr(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag:
 
 def top_features_binary(lr_pipe, n=20):
     """
-    Top χαρακτηριστικά για binary (H0 vs H1).
-    Επιστρέφει δύο λίστες: προς H1 (θετικά coef) και προς H0 (αρνητικά coef).
+    Top features for binary (H0 vs H1).
     """
     # Unpack vectorizer & LR
     vec: TfidfVectorizer = lr_pipe.named_steps["tfidfvectorizer"]
     lr: LogisticRegression = lr_pipe.named_steps["logisticregression"]
     feature_names = np.array(vec.get_feature_names_out())
 
-    # Για binary, lr.coef_.shape = (1, n_features); θετικά -> class 1
     coefs = lr.coef_[0]
     top_h1_idx = np.argsort(coefs)[::-1][:n]
     top_h0_idx = np.argsort(coefs)[:n]
@@ -155,8 +164,7 @@ def top_features_binary(lr_pipe, n=20):
 
 def top_features_multiclass(lr_pipe, labels: list[str], n=10):
     """
-    Top χαρακτηριστικά ανά κλάση για multiclass (one-vs-rest / multinomial).
-    Επιστρέφει dict: class -> [(token, weight), ...]
+    Top features per class για multiclass (one-vs-rest / multinomial).
     """
     vec: TfidfVectorizer = lr_pipe.named_steps["tfidfvectorizer"]
     lr: LogisticRegression = lr_pipe.named_steps["logisticregression"]
@@ -164,7 +172,7 @@ def top_features_multiclass(lr_pipe, labels: list[str], n=10):
 
     tops = {}
     for i, cls in enumerate(lr.classes_):
-        if cls not in labels:  # safety
+        if cls not in labels:
             continue
         coefs = lr.coef_[i]
         idx = np.argsort(coefs)[::-1][:n]
@@ -180,11 +188,16 @@ if __name__ == "__main__":
     y_bin, mask_bin = to_binary_labels(y_full)
     X_bin = X_text[mask_bin].reset_index(drop=True)
     y_bin = y_bin.reset_index(drop=True)
-    labels_bin = sorted(y_bin.unique())  # ["h0","h1"]
+    labels_bin = sorted(y_bin.unique())
 
-    res_bin = train_eval_lr(X_bin, y_bin, labels_bin, tag="binary_h0_vs_h1")
+    # res_bin = train_eval_lr(X_bin, y_bin, labels_bin, tag="binary_h0_vs_h1")
+    # ---------- Binary
+    best_C_bin, _ = tune_lr_C(X_bin, y_bin)
+    res_bin = train_eval_lr(X_bin, y_bin, labels_bin, tag="binary_h0_vs_h1", C=best_C_bin)
 
-    # Αποθήκευση top features
+
+
+    #  top features
     try:
         top_h1, top_h0 = top_features_binary(res_bin["pipe"], n=25)
         with open(Path(OUTPUT_LOG_REG) / "lr_binary_top_features.json", "w", encoding="utf-8") as f:
@@ -197,13 +210,15 @@ if __name__ == "__main__":
 
     # ---------- Multiclass (H0 vs H1a…e)
     y_multi = y_full.copy()
-    # Κρατάμε όσες κλάσεις έχουν τουλάχιστον 5 δείγματα (για σταθερό CV/split)
     cls_counts = y_multi.value_counts()
     keep_classes = cls_counts[cls_counts >= 5].index.tolist()
     mask_multi = y_multi.isin(keep_classes)
     X_multi = X_text[mask_multi].reset_index(drop=True)
     y_multi = y_multi[mask_multi].reset_index(drop=True)
     labels_multi = sorted(y_multi.unique())
+
+    # ---------- Multiclass
+    best_C_multi, _ = tune_lr_C(X_multi, y_multi)
 
     if len(labels_multi) >= 2:
         res_multi = train_eval_lr(X_multi, y_multi, labels_multi, tag="multiclass_h0_h1subtypes")

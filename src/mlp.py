@@ -41,7 +41,7 @@ def train_eval_mlp(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag
 
     Xtr, Xte, ytr, yte = train_test_split(X_text, y, test_size=0.2, stratify=y, random_state=42)
 
-    # --- class weights μέσω sample_weight ---
+    # --- class weights through sample_weight ---
     classes = np.unique(ytr)
     cw = compute_class_weight(class_weight="balanced", classes=classes, y=ytr)
     class_weight_map = {cls: w for cls, w in zip(classes, cw)}
@@ -49,10 +49,10 @@ def train_eval_mlp(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag
 
     vec = build_vectorizer()
     mlp = MLPClassifier(
-        hidden_layer_sizes=(256,),
+        hidden_layer_sizes=(256, 128),
         activation="relu",
         solver="adam",
-        alpha=1e-4,
+        alpha=1e-3,
         learning_rate="adaptive",
         max_iter=400,
         early_stopping=False,
@@ -64,13 +64,12 @@ def train_eval_mlp(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag
     )
 
     if oversample:
-        # TF‑IDF (sparse) → SVD (dense) → Standardize → SMOTE → MLP
         svd = TruncatedSVD(n_components=300, random_state=42)
         smote = SMOTE(k_neighbors=1, random_state=42)
         pipe = ImbPipeline([
             ("tfidfvectorizer", vec),
             ("svd", svd),
-            ("scaler", StandardScaler()),  # μετά το SVD (dense)
+            ("scaler", StandardScaler()),
             ("smote", smote),
             ("mlpclassifier", mlp),
         ])
@@ -147,7 +146,7 @@ if __name__ == "__main__":
     labels_bin = sorted(y_bin.unique())
     train_eval_mlp(X_bin, y_bin, labels_bin, tag="binary_h0_vs_h1", oversample=False)
 
-    # ----- Multiclass (≥5 δείγματα/κλάση)
+    # ----- Multiclass
     y_multi = y_full.copy()
     cls_counts = y_multi.value_counts()
     keep_classes = cls_counts[cls_counts >= 5].index.tolist()

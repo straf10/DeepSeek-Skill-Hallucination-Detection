@@ -40,9 +40,8 @@ def train_eval_svm(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag
     svm = LinearSVC(C=1.0, class_weight="balanced", max_iter=5000, random_state=42)
     pipe = make_pipeline(vec, svm)
 
-    # CV με auto n_splits για να αποφεύγονται warnings
     min_class_size = ytr.value_counts().min()
-    n_splits = int(max(2, min(5, min_class_size)))  # τουλάχιστον 2
+    n_splits = int(max(2, min(5, min_class_size)))
     kf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
     cv_scores = cross_val_score(pipe, Xtr, ytr, scoring="f1_macro", cv=kf, n_jobs=-1)
 
@@ -109,7 +108,7 @@ if __name__ == "__main__":
     labels_bin = sorted(y_bin.unique())
     train_eval_svm(X_bin, y_bin, labels_bin, tag="binary_h0_vs_h1")
 
-    # ----- Multiclass (H0 vs H1a…e) με φίλτρο ≥5 δείγματα ανά κλάση
+    # ----- Multiclass (H0 vs H1a…e)
     y_multi = y_full.copy()
     cls_counts = y_multi.value_counts()
     keep_classes = cls_counts[cls_counts >= 5].index.tolist()

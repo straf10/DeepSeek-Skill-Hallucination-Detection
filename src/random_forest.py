@@ -159,7 +159,7 @@ def train_eval_rf(X_text: pd.Series, y: pd.Series, labels_order: list[str], tag:
 
 def export_feature_importances(rf_pipe, out_path: Path, top_k: int = 50):
     """
-    Εξαγωγή feature importances χαρτογραφώντας τα indices σε tokens TF-IDF.
+    Extract feature importances by mapping indices to tokens TF-IDF.
     """
     vec: TfidfVectorizer = rf_pipe.named_steps["tfidfvectorizer"]
     rf: RandomForestClassifier = rf_pipe.named_steps["randomforestclassifier"]

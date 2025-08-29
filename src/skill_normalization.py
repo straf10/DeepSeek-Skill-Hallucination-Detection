@@ -17,13 +17,13 @@ WHITESPACE_RE   = re.compile(r"\s+")
 BULLET_LINE_RE  = re.compile(r"""^\s*(?:[-*•]|\d+[\.)])\s*(.+)$""")
 
 def norm(s: str) -> str:
-    """Lower + strip + συμπίεση whitespaces."""
+    """Lower + strip + whitespaces."""
     s = (s or "").strip()
     s = WHITESPACE_RE.sub(" ", s)
     return s.lower()
 
 def strip_meta(text: str) -> str:
-    """Αφαίρεση <think>…</think> και code fences από απαντήσεις."""
+    """Removes <think>…</think> block and code fences from answers."""
     t = text or ""
     t = THINK_RE.sub("", t)
     t = CODE_FENCE_RE.sub("", t)
@@ -57,8 +57,7 @@ def _dedup_preserve_order(xs: Iterable[str]) -> List[str]:
 # ---------- Parsing of “open/closed mode” answers ----------
 def parse_answer_to_skill_list(answer_text: str) -> List[str]:
     """
-    Παίρνει ελεύθερο κείμενο (με bullets/αριθμημένες λίστες κ.λπ.)
-    και επιστρέφει κανονικοποιημένη λίστα skills.
+    Returns normalised skills list
     """
     if not answer_text:
         return []
@@ -87,11 +86,7 @@ def parse_answer_to_skill_list(answer_text: str) -> List[str]:
 
 def load_open_or_closed(jsonl_path: str | Path) -> pd.DataFrame:
     """
-    Διαβάζει JSONL γραμμές με πεδία:
-      - question (απαραίτητο)
-      - answer (λίστα/bullets κ.λπ.)
-    Αγνοεί τα timestamps όπως ζητήθηκε.
-    Επιστρέφει DF με στήλες: question, skills (semicolon-joined).
+    Reads JSONL lines and returns DF with columns: question, skills (semicolon-joined).
     """
     rows: List[Dict[str, str]] = []
     for rec in _read_jsonl(jsonl_path):
@@ -109,9 +104,7 @@ def load_open_or_closed(jsonl_path: str | Path) -> pd.DataFrame:
 # ---------- Parsing of “job samples” answers ----------
 def _extract_json_array(text: str) -> List[Dict[str, Any]]:
     """
-    Επιστρέφει το *πρώτο* JSON array μέσα στο text.
-    Αν το array είναι κομμένο (λείπει τελικό ] ή λείπει μέρος τελευταίου αντικειμένου),
-    γίνεται salvage: κόψιμο μέχρι το τελευταίο πλήρες '}' και κλείσιμο με ']'.
+    Returns 1st JSON array from text.
     """
     if not text:
         return []
@@ -138,7 +131,7 @@ def _extract_json_array(text: str) -> List[Dict[str, Any]]:
             except json.JSONDecodeError:
                 pass
 
-    # --- Fallback for unfinished anwers ---
+    # --- Fallback for unfinished answers ---
     if start == -1:
         return []
 
@@ -166,10 +159,7 @@ def _extract_json_array(text: str) -> List[Dict[str, Any]]:
 
 def load_job_samples(jsonl_path: str | Path) -> pd.DataFrame:
     """
-    Περιμένει JSONL γραμμές με πεδία:
-      - job_id (string/int)
-      - answer (που περιέχει JSON array με αντικείμενα: skill_label, evidence, confidence)
-    Επιστρέφει DF με στήλες: job_id, skill_label, confidence, evidence.
+    Waits JSONL lines and returns DF with columns: job_id, skill_label, confidence, evidence.
     """
     out_rows: List[Dict[str, Any]] = []
     for rec in _read_jsonl(jsonl_path):
@@ -180,25 +170,24 @@ def load_job_samples(jsonl_path: str | Path) -> pd.DataFrame:
             continue
 
         for obj in arr:
-            # Προχώρα μόνο αν είναι dict
+            # only if dict
             if not isinstance(obj, dict):
                 continue
 
-            # Κανονικοποίηση label με ασφαλή πρόσβαση
+            # normalisation
             label_raw = obj.get("skill_label")
             label = norm(label_raw) if label_raw is not None else ""
             if not label:
-                # Παράλειψε γραμμές χωρίς label
+                # skip empty lines
                 continue
 
-            # Safe parse για confidence ΧΩΡΙΣ try/except ώστε να μην μαρκάρεται ως unreachable
             conf_raw = obj.get("confidence")
             conf = None
             if isinstance(conf_raw, (int, float)):
                 conf = float(conf_raw)
             elif isinstance(conf_raw, str):
                 s = conf_raw.strip()
-                # δέχεται 0.85, 1, .9, 1e-3 κ.λπ.
+                # only values : 0.85, 1, .9, 1e-3 etc
                 if re.fullmatch(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?", s):
                     conf = float(s)
 
@@ -206,7 +195,7 @@ def load_job_samples(jsonl_path: str | Path) -> pd.DataFrame:
 
             out_rows.append({
                 "job_id": job_id,
-                "skill_label": label,  # ήδη lower/strip/whitespace‑compress
+                "skill_label": label,
                 "confidence": conf,  # float ή None
                 "evidence": evidence
             })

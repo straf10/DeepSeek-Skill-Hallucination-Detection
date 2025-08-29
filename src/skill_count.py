@@ -20,7 +20,7 @@ WS_RE = re.compile(r"\s+")
 
 def _normalize_label(s: str) -> str:
     s = (s or "").strip().lower()
-    s = WS_RE.sub(" ", s)  # συμπίεση συνεχόμενων κενών σε ένα space
+    s = WS_RE.sub(" ", s)
     return s
 
 
@@ -37,7 +37,7 @@ def count_and_filter_skills(
     if col_name not in df.columns:
         raise ValueError(f"Column '{col_name}' not found in sheet '{sheet_name}'")
 
-    # Ασφαλές fill + split + strip + lower + explode
+    # fill + split + strip + lower + explode
     skill_series = (
         df[col_name].fillna('')
           .astype(str)
@@ -47,14 +47,12 @@ def count_and_filter_skills(
     )
 
     if skill_series.empty:
-        # Γράψε άδειο Excel με σωστά sheet names για να μη "σπάει" downstream
         with pd.ExcelWriter(output_xlsx, engine='openpyxl') as writer:
             pd.DataFrame(columns=['skill_label','count','cum_coverage']).to_excel(writer, sheet_name='skill_counts', index=False)
             pd.DataFrame(columns=['skill_label','count','cum_coverage']).to_excel(writer, sheet_name='filtered_skills', index=False)
         print("No skills found. Empty result written.")
         return
 
-    # Μετρήσεις
     counts = (
         skill_series.value_counts()
         .rename_axis('skill_label')
@@ -66,10 +64,10 @@ def count_and_filter_skills(
     total_occurrences = int(counts['count'].sum())
     counts['cum_coverage'] = counts['count'].cumsum() / total_occurrences if total_occurrences else 0.0
 
-    # Φιλτράρισμα ( > min_count)
+    # Filter ( > min_count)
     filtered = counts[counts['count'] > min_count].copy()
 
-    # Whitelist (επιστρέφει normalized)
+    # Whitelist
     if whitelist:
         wl = [_normalize_label(w) for w in whitelist if _normalize_label(w)]
         if wl:

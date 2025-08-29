@@ -38,7 +38,7 @@ if not USER or not PASSWORD:
     sys.exit("ERROR: Missing username / password in .env")
 
 else:
-    print("Successfull login")
+    print("Successful login")
 
 _SESSION = req.Session()
 _SESSION.verify = VERIFY_SSL
@@ -58,7 +58,7 @@ def main():
     export_excel(jobs, outdir=Path("../output"))
 
 def _refresh_token() -> None:
-    """Ανανεώνει / παίρνει JWT token και το εισάγει στα headers του session."""
+    """Refresh JWT token and input in headers of session."""
     global _TOKEN
     resp = _SESSION.post(f"{API_BASE}/login", json={"username": USER, "password": PASSWORD}, timeout=10)
     resp.raise_for_status()
@@ -67,7 +67,7 @@ def _refresh_token() -> None:
     log.info("Authenticated and token refreshed.")
 
 def _api_post_form(endpoint: str, form: List[Tuple[str, str]], params: Optional[Dict[str, str]] = None, timeout: int = 30) -> req.Response:
-    """POST x-www-form-urlencoded με αυτόματο retry και αυτόματο refresh JWT αν λάβουμε 401."""
+    """POST x-www-form-urlencoded with automated retry and refresh JWT if error 401."""
 
     if _TOKEN is None:
         _refresh_token()
@@ -99,7 +99,7 @@ def _chunks(iterable, size):
         yield chunk
 
 def batch_labels(endpoint: str, uris: Set[str]) -> Dict[str, str]:
-    """Κάνει batch look-up σε /<endpoint>, επιστρέφει dict uri→label."""
+    """Batch look-up , returns dict uri→label."""
     if not uris:
         return {}
 
@@ -128,13 +128,12 @@ def batch_labels(endpoint: str, uris: Set[str]) -> Dict[str, str]:
     return mapping
 
 def fetch_jobs(*, page_size: int = PAGE_SIZE, max_pages: int = MAX_PAGES, limit: int | None = None, req_timeout: int = 30) -> List[Dict]:
-    """Επιστρέφει μοναδικές αγγελίες"""
+    """Returns unique job postings"""
 
     log.debug("→ Entering fetch_jobs: page_size=%s max_pages=%s limit=%s", page_size, max_pages, limit)
     form_body = [("occupation_ids_logic", "or")] + [("occupation_ids", uri) for uri in ISCO_URIS]
     jobs_raw: List[dict] = []
 
-    # Παράλληλη ανάκτηση σελίδων
     pages = list(range(1, max_pages + 1))
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
         # Submit κάθε σελίδα ως ξεχωριστό task
@@ -143,7 +142,6 @@ def fetch_jobs(*, page_size: int = PAGE_SIZE, max_pages: int = MAX_PAGES, limit:
                 page for page in pages
         }
 
-        # δείχνουμε ποια futures υποβλήθηκαν
         for fut, page in futures.items():
             log.debug("  page %d → future %s", page, fut)
 
@@ -162,7 +160,7 @@ def fetch_jobs(*, page_size: int = PAGE_SIZE, max_pages: int = MAX_PAGES, limit:
             except Exception as e:
                 log.error("Error fetching page %d: %s", page, e)
 
-        # Διασφάλιση μοναδικών Id
+        # Secure unique Id
         seen: Set[str] = set()
         uniq_jobs: List[dict] = []
         for job in jobs_raw:
@@ -178,7 +176,7 @@ def fetch_jobs(*, page_size: int = PAGE_SIZE, max_pages: int = MAX_PAGES, limit:
         return uniq_jobs
 
 def export_excel(jobs: List[Dict], *, outdir: Path) -> None:
-    """Γράφει jobs.xlsx, skills.xlsx, job_skills.xlsx στο outdir."""
+    """Writes jobs.xlsx, skills.xlsx, job_skills.xlsx."""
 
     outdir.mkdir(parents=True, exist_ok=True)
     output_path = outdir / "output.xlsx"
@@ -227,8 +225,7 @@ def export_excel(jobs: List[Dict], *, outdir: Path) -> None:
 
 def report_missing_values(excel_path):
     """
-    Διαβάζει το Excel αρχείο και αναφέρει πόσες κενές τιμές (NaN ή
-    κενές συμβολοσειρές) υπάρχουν σε κάθε στήλη.
+    Reads Excel file and reports NaN values and empty strings.
     """
     df = pd.read_excel(excel_path)
 

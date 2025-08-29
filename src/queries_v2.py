@@ -11,7 +11,7 @@ from requests.adapters import HTTPAdapter
 
 
 # ---------- Paths / Config ----------
-INPUT_QUERIES = r"C:\Python\THESIS\skillab_job_fetcher\input\queries"
+INPUT_QUERIES = r"C:\Python\THESIS\skillab_job_fetcher\input\extra_sample"
 OUT_JSONL = r"C:\Python\THESIS\skillab_job_fetcher\output\open_mode_results.jsonl"
 
 THINK_RE = re.compile(r"<think>[\s\S]*?(?:</think>|$)", re.IGNORECASE)
@@ -89,7 +89,7 @@ def make_concise_prompt(query, max_points=10):
     )
 
 def run_queries(max_points: int = 10) -> None:
-    """Φορτώνει queries, ρωτά το μοντέλο και γράφει JSONL: {timestamp, question, answer}."""
+    """Loads queries, asks model and writes JSONL: {timestamp, question, answer}."""
     queries = load_queries()
     if not queries:
         raise RuntimeError("No queries found. Check INPUT_QUERIES path.")
@@ -104,7 +104,6 @@ def run_queries(max_points: int = 10) -> None:
         if not answer:
             answer = "- (no matching skills)"
 
-        # Γράψιμο σε JSONL
         write_jsonl({
             "timestamp": tstamp,
             "question": q,

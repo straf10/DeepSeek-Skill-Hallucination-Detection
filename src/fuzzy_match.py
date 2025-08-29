@@ -13,7 +13,7 @@ OUTPUT_XLSX     = r"C:\Python\THESIS\skillab_job_fetcher\output\fuzzy_candidates
 # ---------- Config ----------
 USE_ALL_SKILLS = True
 TOP_K = 3
-SCORER = fuzz.token_sort_ratio  # εναλλακτικά fuzz.ratio
+SCORER = fuzz.token_sort_ratio  # or fuzz.ratio
 MIN_DISPLAY_SCORE = 70
 CAND_THRESHOLD        = 70
 AUTO_ACCEPT_THRESHOLD = 90
@@ -78,7 +78,7 @@ def topk_matches(label: str, allowed_list: List[str], k: int) -> List[Tuple[str,
 
 def augment_predictions(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Προσθέτει:
+    Adds:
       - predicted_label = candidate_1
       - predicted_score = score_1
       - band (High/Medium/Low/VeryLow)
@@ -87,7 +87,7 @@ def augment_predictions(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty:
         return df
     df = df.copy()
-    # ασφαλής numeric score_1
+    # numeric score_1
     s1 = pd.to_numeric(df.get("score_1", np.nan), errors="coerce")
     df["predicted_label"] = df.get("candidate_1", "")
     df["predicted_score"] = s1
@@ -106,8 +106,7 @@ def augment_predictions(df: pd.DataFrame) -> pd.DataFrame:
 
 def split_by_threshold(df: pd.DataFrame, threshold: int):
     """
-    Επιστρέφει (candidates_df, no_match_df) με βάση το αν score_1 >= threshold.
-    Εφόσον το RapidFuzz επιστρέφει φθίνουσα σειρά, το score_1 είναι πάντα το μέγιστο.
+    Returns (candidates_df, no_match_df) based on if score_1 >= threshold.
     """
     if df.empty:
         return df.copy(), df.copy()
@@ -124,7 +123,7 @@ def process_open_or_closed(df: pd.DataFrame, sheet_name: str, allowed: Set[str])
         q = str(row.get("question") or "")
         preview = q.replace("\n", " ")[:120]
         skills = split_semicolon_cell(str(row.get("skills") or ""))
-        # optional per-row dedup (χωρίς normalization)
+        # optional per-row dedup
         seen = set()
         for lab in skills:
             if lab in seen:
@@ -164,7 +163,7 @@ def process_job_samples(df: pd.DataFrame, allowed: Set[str]) -> pd.DataFrame:
         if not lab or lab in NO_MATCH_TOKENS:
             continue
         if lab in allowed:
-            continue  # κρατάμε μόνο τα non-exact
+            continue
         matches = topk_matches(lab, allowed_list, TOP_K)
         best = max((s for _, s in matches), default=0)
         rec = {
@@ -210,12 +209,10 @@ def main():
     closed_out = process_open_or_closed(closed_df, "closed_mode", allowed)
     jobs_out = process_job_samples(jobs_df, allowed)
 
-    # εμπλουτισμός με predicted_* & suggestions
     open_out = augment_predictions(open_out)
     closed_out = augment_predictions(closed_out)
     jobs_out = augment_predictions(jobs_out)
 
-    # split σε candidates/no-match με βάση το CAND_THRESHOLD
     open_cand, open_nomatch = split_by_threshold(open_out, CAND_THRESHOLD)
     closed_cand, closed_nomatch = split_by_threshold(closed_out, CAND_THRESHOLD)
     jobs_cand, jobs_nomatch = split_by_threshold(jobs_out, CAND_THRESHOLD)
