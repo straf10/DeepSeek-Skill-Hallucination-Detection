@@ -11,7 +11,7 @@ from requests.adapters import HTTPAdapter
 
 
 # ---------- Paths / Config ----------
-INPUT_QUERIES = r"C:\Python\THESIS\skillab_job_fetcher\input\extra_sample"
+INPUT_QUERIES = r"C:\Python\THESIS\skillab_job_fetcher\input\queries"
 OUT_JSONL = r"C:\Python\THESIS\skillab_job_fetcher\output\open_mode_results.jsonl"
 
 THINK_RE = re.compile(r"<think>[\s\S]*?(?:</think>|$)", re.IGNORECASE)
