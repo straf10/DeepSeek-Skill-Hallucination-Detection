@@ -4,6 +4,11 @@ This repository contains data pipelines, analysis tools and machine‑learning b
 
 ###
 
+<div align="center">
+  <img height="350" src="https://i.postimg.cc/Jz68j5L9/image.png"  />
+</div>
+
+
 Overview
 ---
 The goal of the project is to detect and analyze hallucinations in answers produced by the DeepSeek language model when asked to list skills or extract skills from job descriptions. The pipeline compares model outputs with ground‑truth skills extracted from real job postings (via the SKILLAB dataset/APIs) and reports hallucination metrics.
