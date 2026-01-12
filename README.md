@@ -19,13 +19,13 @@ Usage
 ---
 A typical workflow to measure hallucinations is:
 ###
-1. Prepare ground‑truth skills
+### 1. Prepare ground‑truth skills
 
  - Run data_export.py to download jobs and skills from SKILLAB.
 
  - Run skill_count.py to compute skill frequencies and produce an allowed skill list (choose a minimum count threshold).
 
-2. Query the model
+### 2. Query the model
 
  - Write your questions in a text file under input/queries.
 
@@ -35,23 +35,23 @@ A typical workflow to measure hallucinations is:
 
  - To query with full job descriptions, run job_sample_prompt.py which returns JSON objects with skill_label, evidence and confidence.
 
-3. Normalise predictions
+### 3. Normalise predictions
 
  - Use skill_normalization.py to parse the model’s answers, strip <think> meta tokens, split bullet or comma lists, normalise skill names and save them into an Excel file with separate sheets for open, closed and job samples.
 
-4. Fuzzy match and label
+### 4. Fuzzy match and label
 
  - Run fuzzy_match.py to generate candidate matches between predicted skills and the allowed set using rapidfuzz.
 
  - Run hallucinations_labelling.py to assign high‑confidence non‑hallucination labels (H0) using exact matches, synonyms and fuzzy matches, and export low‑confidence skills for manual labelling.
 
-5. Statistics and EDA
+### 5. Statistics and EDA
 
  - Use stats.py to summarise how many skills per query/job were predicted, the proportion of “no matching skills” responses and top‑10 skills.
 
  - Use hallucination_eda.py to analyse manual labels and distribution of hallucination types.
 
-6. Train classifiers
+### 6. Train classifiers
 
  - Labelled datasets can be used to train baseline classifiers.
 
@@ -59,7 +59,7 @@ A typical workflow to measure hallucinations is:
 
  - Random forest and logistic regression scripts also output top features or feature importance lists.
 
-7. Notes
+### 7. Notes
 
  - The project uses local deployment of DeepSeek via the Ollama server (BASE_URL = http://localhost:11434) for reproducibility. Adjust BASE_URL and MODEL_NAME if calling a different model or API.
 
